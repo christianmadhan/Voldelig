@@ -4,7 +4,28 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Title>Voldelig</Title>
+    <Authors>Christian Witt</Authors>
+    <Company>VOLI</Company>
+    <Description>A Maconomy API Client</Description>
+    <Copyright>2205 VOLI</Copyright>
+    <PackageProjectUrl>https://voliconnect.com/voldelig</PackageProjectUrl>
+    <PackageIcon>grok_generated.jpg</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/christianmadhan/Voldelig</RepositoryUrl>
+    <PackageTags>Maconomy</PackageTags>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\..\Skrivebord\grok_generated.jpg">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\..\..\..\Skrivebord\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.3" />
