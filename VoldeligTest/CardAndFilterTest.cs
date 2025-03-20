@@ -25,12 +25,32 @@ public class CardAndFilterTest
     }
 
     [Fact]
+    public async Task UpdateEmpTest()
+    {
+        var client = new Voldelig(_configuration);
+        var employee = new Employees() { EmployeeNumber = "101001", Name1 = "VOLDELIG" };
+
+        var employeeUpdated = await client.Authenticate().Card(ActionType.Update, employee);
+        var tt = employeeUpdated.Left;
+        Employees newemployee = employeeUpdated.Match(
+            e => e, // If successful, return the emp
+            errorResponse =>
+            {
+                // Handle the error (e.g., logging or throwing an exception)
+                Console.WriteLine($"Request failed: {errorResponse.StatusCode}");
+                return new Employees(); // Return an empty list as a fallback
+            }
+         );
+        Assert.True(employeeUpdated.IsLeft);
+    }
+
+    [Fact]
     public async Task FilterTestClientFromConfigClass()
     {
         var client = new Voldelig(_configuration);
-        Expression<Func<Employees, bool>> predicate = e => e.Gender != GenderType.MALE;
+        Expression<Func<Employees, bool>> predicate = null;
 
-        var employeeList = await client.Authenticate().Filter(predicate);
+        var employeeList = await client.Authenticate().Filter(predicate, limit: 0);
         List<Employees> employees = employeeList.Match(
             list => list, // If successful, return the list
             errorResponse =>

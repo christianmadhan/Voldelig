@@ -205,5 +205,68 @@ namespace VoldeligClient
             var response = await httpClient.PostAsync(endpoint, content);
             return response;
         }
+
+        public static Either<List<T>, HttpResponseMessage> EnsureReconnectTokenFilter<T>(HttpResponseMessage response, Voldelig client)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                return response; // Return Right (failure case)
+            }
+
+            // Handle "Maconomy-Reconnect" header
+            if (response.Headers.TryGetValues("Maconomy-Reconnect", out var token))
+            {
+                client.reconnectToken = token.First();
+                client.httpClient.DefaultRequestHeaders.Remove("Authorization");
+                client.httpClient.DefaultRequestHeaders.Add("Authorization", $"X-Reconnect {client.reconnectToken}");
+            }
+
+            // Handle "Content-Type" header (only set if empty)
+            if (string.IsNullOrEmpty(client.containerContentType) &&
+                response.Content.Headers.TryGetValues("Content-Type", out var type))
+            {
+                client.containerContentType = type.FirstOrDefault();
+            }
+
+            // Handle "Maconomy-Concurrency-Control" header
+            if (response.Headers.TryGetValues("Maconomy-Concurrency-Control", out var concurrency))
+            {
+                client.concurrencyControl = concurrency.FirstOrDefault();
+            }
+
+            // Return success (Left) with default(T) since we don't modify T
+            return default(List<T>);
+        }
+        public static Either<T, HttpResponseMessage> EnsureReconnectToken<T>(HttpResponseMessage response, Voldelig client)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                return response; // Return Right (failure case)
+            }
+
+            // Handle "Maconomy-Reconnect" header
+            if (response.Headers.TryGetValues("Maconomy-Reconnect", out var token))
+            {
+                client.reconnectToken = token.First();
+                client.httpClient.DefaultRequestHeaders.Remove("Authorization");
+                client.httpClient.DefaultRequestHeaders.Add("Authorization", $"X-Reconnect {client.reconnectToken}");
+            }
+
+            // Handle "Content-Type" header (only set if empty)
+            if (string.IsNullOrEmpty(client.containerContentType) &&
+                response.Content.Headers.TryGetValues("Content-Type", out var type))
+            {
+                client.containerContentType = type.FirstOrDefault();
+            }
+
+            // Handle "Maconomy-Concurrency-Control" header
+            if (response.Headers.TryGetValues("Maconomy-Concurrency-Control", out var concurrency))
+            {
+                client.concurrencyControl = concurrency.FirstOrDefault();
+            }
+
+            // Return success (Left) with default(T) since we don't modify T
+            return default(T);
+        }
     }
 }
