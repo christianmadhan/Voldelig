@@ -201,6 +201,9 @@ namespace VoldeligClient
             {
                 httpClient.DefaultRequestHeaders.Remove("Maconomy-Concurrency-Control");
                 httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Maconomy-Concurrency-Control", concurrencyControl);
+            } else
+            {
+                httpClient.DefaultRequestHeaders.Remove("Maconomy-Concurrency-Control");
             }
             var response = await httpClient.PostAsync(endpoint, content);
             return response;
