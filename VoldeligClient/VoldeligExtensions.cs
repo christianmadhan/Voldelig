@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Reflection.Metadata.Ecma335;
 using Newtonsoft.Json.Linq;
 using VoldeligClient;
 
@@ -194,10 +195,12 @@ public static class VoldeligExtention
                             if (action == ActionType.Get)
                             {
                                 return cardToken != null ? cardToken.ToObject<T>() : new HttpResponseMessage(HttpStatusCode.NoContent);
-
                             }
-                            else
+                            else if (action == ActionType.Update) 
                             {
+                                return cardToken != null ? cardToken.ToObject<T>() : new HttpResponseMessage(HttpStatusCode.NoContent);
+                            } else {
+                                // Handle other action cases
                                 return cardToken != null ? cardToken.ToObject<T>() : new HttpResponseMessage(HttpStatusCode.NoContent);
                             }
 
