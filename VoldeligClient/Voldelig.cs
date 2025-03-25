@@ -10,11 +10,9 @@ namespace VoldeligClient
 {
     public enum ActionType
     {
-        Insert,
         Create,
         Update,
         Delete,
-        Search,
         Get
     }
 
@@ -186,12 +184,28 @@ namespace VoldeligClient
             return response;
         }
 
-        public async Task<string> PostAsync(string endpoint, string body)
+        public async Task<HttpResponseMessage> PostV1Async(string endpoint, string body, bool withConcurrency = false)
         {
             var content = new StringContent(body, Encoding.UTF8, "application/json");
+            if (withConcurrency)
+            {
+                httpClient.DefaultRequestHeaders.Remove("Maconomy-Concurrency-Control");
+                httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Maconomy-Concurrency-Control", concurrencyControl);
+            }
+            else
+            {
+                httpClient.DefaultRequestHeaders.Remove("Maconomy-Concurrency-Control");
+            }
             var response = await httpClient.PostAsync(endpoint, content);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsStringAsync();
+            return response;
+        }
+
+        public async Task<HttpResponseMessage> deleteV1Async(string endpoint)
+        {
+            httpClient.DefaultRequestHeaders.Remove("Maconomy-Concurrency-Control");
+            httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Maconomy-Concurrency-Control", concurrencyControl);
+            var response = await httpClient.DeleteAsync(endpoint);
+            return response;
         }
 
         public async Task<HttpResponseMessage> PostV2Async(string endpoint, string body, bool withConcurrency = false)

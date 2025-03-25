@@ -14,70 +14,8 @@ using VoldeligClient;
 public static class VoldeligExtention
 {
 
-    public static Either<List<T>, HttpResponseMessage> EnsureReconnectTokenFilter<T>(HttpResponseMessage response, Voldelig client)
-    {
-        if (!response.IsSuccessStatusCode)
-        {
-            return response; // Return Right (failure case)
-        }
 
-        // Handle "Maconomy-Reconnect" header
-        if (response.Headers.TryGetValues("Maconomy-Reconnect", out var token))
-        {
-            client.reconnectToken = token.First();
-            client.httpClient.DefaultRequestHeaders.Remove("Authorization");
-            client.httpClient.DefaultRequestHeaders.Add("Authorization", $"X-Reconnect {client.reconnectToken}");
-        }
-
-        // Handle "Content-Type" header (only set if empty)
-        if (string.IsNullOrEmpty(client.containerContentType) &&
-            response.Content.Headers.TryGetValues("Content-Type", out var type))
-        {
-            client.containerContentType = type.FirstOrDefault();
-        }
-
-        // Handle "Maconomy-Concurrency-Control" header
-        if (response.Headers.TryGetValues("Maconomy-Concurrency-Control", out var concurrency))
-        {
-            client.concurrencyControl = concurrency.FirstOrDefault();
-        }
-
-        // Return success (Left) with default(T) since we don't modify T
-        return default(List<T>);
-    }
-    public static Either<T, HttpResponseMessage> EnsureReconnectToken<T>(HttpResponseMessage response, Voldelig client)
-    {
-        if (!response.IsSuccessStatusCode)
-        {
-            return response; // Return Right (failure case)
-        }
-
-        // Handle "Maconomy-Reconnect" header
-        if (response.Headers.TryGetValues("Maconomy-Reconnect", out var token))
-        {
-            client.reconnectToken = token.First();
-            client.httpClient.DefaultRequestHeaders.Remove("Authorization");
-            client.httpClient.DefaultRequestHeaders.Add("Authorization", $"X-Reconnect {client.reconnectToken}");
-        }
-
-        // Handle "Content-Type" header (only set if empty)
-        if (string.IsNullOrEmpty(client.containerContentType) &&
-            response.Content.Headers.TryGetValues("Content-Type", out var type))
-        {
-            client.containerContentType = type.FirstOrDefault();
-        }
-
-        // Handle "Maconomy-Concurrency-Control" header
-        if (response.Headers.TryGetValues("Maconomy-Concurrency-Control", out var concurrency))
-        {
-            client.concurrencyControl = concurrency.FirstOrDefault();
-        }
-
-        // Return success (Left) with default(T) since we don't modify T
-        return default(T);
-    }
-
-    public static async Task<Either<List<T>, HttpResponseMessage>> Filter<T>(this Task<Voldelig> authTask, Expression<Func<T, bool>>? expr, int limit = 25)
+    public static async Task<Either<List<T>, VoldeligHttpResponseMessage>> Filter<T>(this Task<Voldelig> authTask, Expression<Func<T, bool>>? expr, int limit = 25)
     {
         var client = await authTask;
         string entityName = typeof(T).Name.ToLower();
@@ -91,9 +29,9 @@ public static class VoldeligExtention
             var filterUrl = $"{client.baseUrl}/containers/{client.shortname}/{entityName}/filter";
             object jsonBody = method.Invoke(instance, new object[] { exprAsString, limit });
             response = await client.PostV2Async(filterUrl, (string)jsonBody);
-            var ensureFilter = EnsureReconnectTokenFilter<List<T>>(response, client);
+            var ensureFilter = await Helper.EnsureReconnectTokenFilter<List<T>>(response, client);
 
-            return await ensureFilter.Match<Task<Either<List<T>, HttpResponseMessage>>>(
+            return await ensureFilter.Match<Task<Either<List<T>, VoldeligHttpResponseMessage>>>(
                 async _ =>
                 {
                     string responseContent = await response.Content.ReadAsStringAsync();
@@ -116,7 +54,7 @@ public static class VoldeligExtention
 
                     return filterList;
                 },
-                responseFilterx => Task.FromResult<Either<List<T>, HttpResponseMessage>>(responseFilterx)
+                responseFilterx => Task.FromResult<Either<List<T>, VoldeligHttpResponseMessage>>(responseFilterx)
             );
 
         }
@@ -132,8 +70,8 @@ public static class VoldeligExtention
                 filterUrl = $"{client.baseUrl}/containers/v1/{client.shortname}/{entityName}/filter?&fields={fieldNames}&limit={limit}";
             }
             response = await client.GetAsync(filterUrl);
-            var ensureFilter = EnsureReconnectTokenFilter<List<T>>(response, client);
-            return await ensureFilter.Match<Task<Either<List<T>, HttpResponseMessage>>>(
+            var ensureFilter = await Helper.EnsureReconnectTokenFilter<List<T>>(response, client);
+            return await ensureFilter.Match<Task<Either<List<T>, VoldeligHttpResponseMessage>>>(
                async _ =>
                {
                    string responseContent = await response.Content.ReadAsStringAsync();
@@ -156,12 +94,12 @@ public static class VoldeligExtention
 
                    return filterList;
                },
-               responseFilterx => Task.FromResult<Either<List<T>, HttpResponseMessage>>(responseFilterx)
+               responseFilterx => Task.FromResult<Either<List<T>, VoldeligHttpResponseMessage>>(responseFilterx)
            );
         }
     }
 
-    public static async Task<Either<T, HttpResponseMessage>> Card<T>(this Task<Voldelig> authTask, ActionType action, T entity) where T : class, new()
+    public static async Task<Either<T, VoldeligHttpResponseMessage>> Card<T>(this Task<Voldelig> authTask, ActionType action, T entity) where T : class, new()
     {
         var client = await authTask;
         T cardObj = new();
@@ -182,130 +120,113 @@ public static class VoldeligExtention
 
             // Get Instances
             response = await client.PostV2Async(instancesUrl, json);
-            var ensureInstances = EnsureReconnectToken<T>(response, client);
+            var ensureInstances = await Helper.EnsureReconnectToken<T>(response, client);
+            var responseContent = await response.Content.ReadAsStringAsync();
+            JObject instancesJson = JObject.Parse(responseContent);
+            JToken dataToken = instancesJson.SelectToken("links.data:some-key.template");
+            JToken createToken = instancesJson.SelectToken("links.action:init-create.href");
 
-            return await ensureInstances.Match(
-                async _ =>
-                {
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    JObject instancesJson = JObject.Parse(responseContent);
-                    JToken dataToken = instancesJson.SelectToken("links.data:some-key.template");
+            if(action == ActionType.Create && createToken != null)
+            {
+                return await VoldeligActionExtensions.HandleCreateActionV2(client, entity, createToken.ToString());
+            } else
+            {
+                return await ensureInstances.Match(
+                    async _ =>
+                    {
+                        ;
+                        if (dataToken == null)
+                            return Either<T, VoldeligHttpResponseMessage>.FromRight(new VoldeligHttpResponseMessage { MaconomyErrorMessage = "Could not find token: panes.card.links.action:update.href", HttpResponseMessage = new HttpResponseMessage(HttpStatusCode.NoContent) });
 
-                    if (dataToken == null)
-                        return Either<T, HttpResponseMessage>.FromRight(new HttpResponseMessage(HttpStatusCode.NotFound));
+                        var cardUrl = dataToken.ToString().Replace("{0}", keyFieldValue);
+                        response = await client.PostV2Async(cardUrl, "{}", withConcurrency: true);
+                        var responseCardContent = await response.Content.ReadAsStringAsync();
+                        var ensureCard = await Helper.EnsureReconnectToken<T>(response, client);
 
-                    var cardUrl = dataToken.ToString().Replace("{0}", keyFieldValue);
-                    response = await client.PostV2Async(cardUrl, "{}", withConcurrency: true);
-                    var responseCardContent = await response.Content.ReadAsStringAsync();
-                    var ensureCard = EnsureReconnectToken<T>(response, client);
-
-                    return await ensureCard.Match(
-                        async _1 =>
-                        {
-                            JObject CardJson = JObject.Parse(responseCardContent);
-                            JToken cardToken = CardJson.SelectToken("panes.card.records[0].data");
-
-                            if (action == ActionType.Get)
+                        return await ensureCard.Match(
+                            async _1 =>
                             {
-                                return cardToken != null
-                                    ? Either<T, HttpResponseMessage>.FromLeft(cardToken.ToObject<T>())
-                                    : Either<T, HttpResponseMessage>.FromRight(new HttpResponseMessage(HttpStatusCode.NoContent));
-                            }
-                            else if (action == ActionType.Update)
-                            {
-                                JToken updateUrlToken = CardJson.SelectToken("panes.card.links.action:update.href");
-                                if (updateUrlToken == null)
-                                    return Either<T, HttpResponseMessage>.FromRight(new HttpResponseMessage(HttpStatusCode.NotFound));
+                                JObject CardJson = JObject.Parse(responseCardContent);
+                                JToken cardToken = CardJson.SelectToken("panes.card.records[0].data");
 
-                                string updateUrl = updateUrlToken.ToString();
-                                Dictionary<string, object> propertyDict = new Dictionary<string, object>();
-
-                                foreach (var prop in typeof(T).GetProperties())
+                                if (action == ActionType.Get)
                                 {
-                                    if (prop.GetCustomAttribute<System.Text.Json.Serialization.JsonIgnoreAttribute>() != null)
-                                        continue;
-
-                                    var value = prop.GetValue(entity);
-                                    if (value == null) continue;
-
-                                    if (prop.PropertyType == typeof(DateTime) && (DateTime)value == DateTime.MinValue)
-                                        continue;
-
-                                    if (prop.PropertyType.IsEnum)
-                                    {
-                                        var firstEnumValue = Enum.GetValues(prop.PropertyType).GetValue(0);
-                                        if (value.Equals(firstEnumValue))
-                                            continue;
-                                    }
-
-                                    string propertyName = char.ToLowerInvariant(prop.Name[0]) + prop.Name.Substring(1);
-                                    propertyDict.Add(propertyName, value);
+                                    return cardToken != null
+                                        ? Either<T, VoldeligHttpResponseMessage>.FromLeft(cardToken.ToObject<T>())
+                                        : Either<T, VoldeligHttpResponseMessage>.FromRight(new VoldeligHttpResponseMessage { MaconomyErrorMessage = "Could not find token: panes.card.records[0].data", HttpResponseMessage = new HttpResponseMessage(HttpStatusCode.NoContent) });
                                 }
+                                else if (action == ActionType.Update)
+                                {
+                                    return await VoldeligActionExtensions.HandleUpdateActionV2(client, CardJson, entity);
+                                }
+                                else if (action == ActionType.Create)
+                                {
+                                    JToken createUrlToken = CardJson.SelectToken("panes.card.links.action:init-create.href");
+                                    return await VoldeligActionExtensions.HandleCreateActionV2(client, entity, createUrlToken.ToString());
+                                } else if (action == ActionType.Delete) 
+                                {
+                                        JToken deleteUrlToken = CardJson.SelectToken("panes.card.links.action:delete.href");
+                                        return await VoldeligActionExtensions.HandleDeleteActionV2(client, entity, deleteUrlToken.ToString());
+                                }
+                                else
+                                {
+                                    return cardToken != null
+                                        ? Either<T, VoldeligHttpResponseMessage>.FromLeft(cardToken.ToObject<T>())
+                                        : Either<T, VoldeligHttpResponseMessage>.FromRight(new VoldeligHttpResponseMessage { MaconomyErrorMessage = "Could not find token: panes.card.records[0].data", HttpResponseMessage = new HttpResponseMessage(HttpStatusCode.NoContent) });
+                                }
+                            },
+                            responseCard => Task.FromResult(Either<T, VoldeligHttpResponseMessage>.FromRight(responseCard))
+                        );
+                    },
+                    responseInstances => Task.FromResult(Either<T, VoldeligHttpResponseMessage>.FromRight(responseInstances))
+                );
 
-                                var requestObject = new { data = propertyDict };
-                                string jsonPayload = JsonConvert.SerializeObject(requestObject,
-                                    new JsonSerializerSettings
-                                    {
-                                        NullValueHandling = NullValueHandling.Ignore,
-                                        Formatting = Formatting.None
-                                    });
-
-                                response = await client.PostV2Async(updateUrl, jsonPayload, withConcurrency: true);
-                                var responseCardContentAfterUpdate = await response.Content.ReadAsStringAsync();
-                                var ensureCardAfterUpdate = EnsureReconnectToken<T>(response, client);
-
-                                return await ensureCardAfterUpdate.Match(
-                                    async _2 =>
-                                    {
-                                        JObject CardAfterUpdateJson = JObject.Parse(responseCardContentAfterUpdate);
-                                        JToken cardAfterUpdateToken = CardAfterUpdateJson.SelectToken("panes.card.records[0].data");
-
-                                        return cardAfterUpdateToken != null
-                                            ? Either<T, HttpResponseMessage>.FromLeft(cardAfterUpdateToken.ToObject<T>())
-                                            : Either<T, HttpResponseMessage>.FromRight(new HttpResponseMessage(HttpStatusCode.NoContent));
-                                    },
-                                    responseCardAfterUpdate => Task.FromResult(Either<T, HttpResponseMessage>.FromRight(responseCardAfterUpdate))
-                                );
-                            }
-                            else
-                            {
-                                return cardToken != null
-                                    ? Either<T, HttpResponseMessage>.FromLeft(cardToken.ToObject<T>())
-                                    : Either<T, HttpResponseMessage>.FromRight(new HttpResponseMessage(HttpStatusCode.NoContent));
-                            }
-                        },
-                        responseCard => Task.FromResult(Either<T, HttpResponseMessage>.FromRight(responseCard))
-                    );
-                },
-                responseInstances => Task.FromResult(Either<T, HttpResponseMessage>.FromRight(responseInstances))
-            );
+            }
 
         }
         else
         {
-            url = $"{client.baseUrl}/containers/v1/{client.shortname}/{entityName}/data;{keyFieldName}={keyFieldValue}";
-            response = await client.GetAsync(url);
-            var ensureCard = EnsureReconnectToken<T>(response, client);
-            return await ensureCard.Match(
-                async _ =>
-                {
-                    var responseCardContent = await response.Content.ReadAsStringAsync();
-                    JObject CardJson = JObject.Parse(responseCardContent);
-                    JToken cardToken = CardJson.SelectToken("panes.card.records[0].data");
-                    if(action == ActionType.Get)
+            if (action == ActionType.Create) 
+            { 
+                url = $"{client.baseUrl}/containers/v1/{client.shortname}/{entityName}/data/card";
+                return await VoldeligActionExtensions.HandleCreateActionV1(client, entity, url);
+            } 
+            else
+            {
+                url = $"{client.baseUrl}/containers/v1/{client.shortname}/{entityName}/data;{keyFieldName}={keyFieldValue}";
+                response = await client.GetAsync(url);
+                var ensureCard = await Helper.EnsureReconnectToken<T>(response, client);
+                return await ensureCard.Match(
+                    async _ =>
                     {
-                        return cardToken != null ? cardToken.ToObject<T>() : new HttpResponseMessage(HttpStatusCode.NoContent);
-                    } else if(action == ActionType.Update) // NOT IMPLEMENTED YET => TODO!
-                    {
-                       string concurrencyControl = CardJson.SelectToken("panes.card.records[0].meta.concurrencyControl").ToString();
-                        return cardToken != null ? cardToken.ToObject<T>() : new HttpResponseMessage(HttpStatusCode.NoContent);
-                    } else
-                    {
-                        return cardToken != null ? cardToken.ToObject<T>() : new HttpResponseMessage(HttpStatusCode.NoContent);
-                    }
-                },
-                responseCard => Task.FromResult<Either<T, HttpResponseMessage>>(responseCard)
-            );
+                        var responseCardContent = await response.Content.ReadAsStringAsync();
+                        JObject CardJson = JObject.Parse(responseCardContent);
+                        string concurrencyControl = CardJson.SelectToken("panes.card.records[0].meta.concurrencyControl").ToString();
+                        JToken cardToken = CardJson.SelectToken("panes.card.records[0].data");
+                        if (action == ActionType.Get)
+                        {
+                            return cardToken != null ? cardToken.ToObject<T>() : new VoldeligHttpResponseMessage { MaconomyErrorMessage = "Could not find token: panes.card.records[0].data", HttpResponseMessage = new HttpResponseMessage(HttpStatusCode.NoContent) };
+                        }
+                        else if (action == ActionType.Update)
+                        {
+                            string updateurl = CardJson.SelectToken("panes.card.records[0].links.action:update.href").ToString();
+                            client.concurrencyControl = concurrencyControl;
+                            return await VoldeligActionExtensions.HandleUpdateActionV1(client, entity, updateurl);
+                        } else if (action == ActionType.Delete)
+                        {
+                            string deleteurl = CardJson.SelectToken("panes.card.records[0].links.action:delete.href").ToString();
+                            client.concurrencyControl = concurrencyControl;
+                            return await VoldeligActionExtensions.HandleDeleteActionV1(client,entity, deleteurl);
+                        }
+                        else
+                        {
+                            return cardToken != null ? cardToken.ToObject<T>() : new VoldeligHttpResponseMessage { MaconomyErrorMessage = "Could not find token: panes.card.records[0].data", HttpResponseMessage = new HttpResponseMessage(HttpStatusCode.NoContent) };
+                        }
+                    },
+                    responseCard => Task.FromResult<Either<T, VoldeligHttpResponseMessage>>(responseCard)
+                );
+
+            }   
         }
     }
 }
