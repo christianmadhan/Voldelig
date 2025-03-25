@@ -4,6 +4,7 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using static Helper;
 using static VoldeligClient.Voldelig;
+using static VoldeligTest.MaconomyModel.MaconomyEnums;
 
 // Class name should be the same as the container name, because thats how the method that calls either
 // Card or filter find out which container to call.
@@ -61,22 +62,4 @@ public class Employees
         return jsonObject.ToString();
     }
 
-}
-public enum CountryType
-{
-    COUNTRY_NOT_HERE,
-    DENMARK,
-    UK,
-    SWEDEN,
-    NORWAY,
-    FINLAND
-}
-
-
-public enum GenderType
-{
-    GENDER_NOT_HERE,
-    MALE,
-    FEMALE,
-    NIL
 }
