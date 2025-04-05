@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Threading.Tasks;
 using VoldeligClient;
 using Xunit;
+using static VoldeligTest.MaconomyModel.MaconomyEnums;
 
 
 public class FilterTest

@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Threading.Tasks;
 using VoldeligClient;
 using Xunit;
+using static VoldeligTest.MaconomyModel.MaconomyEnums;
 
 
 public class CardTest
@@ -22,6 +23,25 @@ public class CardTest
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 
         _configuration = builder.Build();
+    }
+
+    [Fact]
+    public async Task GetEmpTest()
+    {
+        var client = new Voldelig(_configuration);
+        var employee = new Employees() { EmployeeNumber = "101001"};
+
+        var employeeUpdated = await client.Authenticate().Card(ActionType.Get, employee);
+        Employees newemployee = employeeUpdated.Match(
+            e => e, // If successful, return the emp
+            errorResponse =>
+            {
+                // Handle the error (e.g., logging or throwing an exception)
+                Console.WriteLine($"Request failed: {errorResponse.MaconomyErrorMessage}");
+                return new Employees(); // Return an empty list as a fallback
+            }
+         );
+        Assert.True(employeeUpdated.IsLeft);
     }
 
     [Fact]
@@ -127,7 +147,7 @@ public class CardTest
     [Fact]
     public async Task FilterTestClass()
     {
-
+        var client = new Voldelig(_configuration);
         Expression<Func<Employees, bool>> predicate = e =>
         e.CreatedDate > new DateTime(2019, 1, 1) && e.Gender == GenderType.FEMALE;
 
@@ -137,7 +157,7 @@ public class CardTest
             errorResponse =>
             {
                 // Handle the error (e.g., logging or throwing an exception)
-                Console.WriteLine($"Request failed: {errorResponse.StatusCode}");
+                Console.WriteLine($"Request failed: {errorResponse.MaconomyErrorMessage}");
                 return new List<Employees>(); // Return an empty list as a fallback
             }
          );

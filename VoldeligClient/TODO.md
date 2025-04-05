@@ -13,7 +13,8 @@ CARD -
 
 FILTER -
 
-* I believe the last maconomy specific type that we are missing is amount -> double
+* I believe the last maconomy specific type that we are missing is amount -> double, 
+	* also time(11,11,11) like date, just need to find a container where you can filter on that
 
 
 ## MAYBE?
