@@ -264,6 +264,27 @@ public static class VoldeligExtention
                 return new VoldeligHttpResponseMessage { MaconomyErrorMessage = "Could not find card data token (panes.card.records[0].data)", HttpResponseMessage = new HttpResponseMessage(HttpStatusCode.NoContent) };
             }
 
+            // --- Deserialize Main Entity Data ---
+            T entityResult;
+            try
+            {
+                // Create the result entity from the response data
+                entityResult = cardDataToken.ToObject<T>();
+            }
+            catch (Exception ex)
+            {
+                return new VoldeligHttpResponseMessage { MaconomyErrorMessage = $"Failed to deserialize card data: {ex.Message}", HttpResponseMessage = new HttpResponseMessage(HttpStatusCode.InternalServerError) };
+            }
+
+            // --- *** Populate Table Data IF Entity Supports It *** ---
+            if (entityResult is ICanPopulateTable tableEntity)
+            {
+                JToken tableToken = cardJson.SelectToken("panes.table.records");
+                // No need to check tableProperty here, the interface handles it
+                tableEntity.PopulateTableFromJson(tableToken); // Delegate population
+            }
+            // --- *** End Table Population *** ---
+
             // --- Handle Specific Actions based on Card Data (V1) ---
             switch (action)
             {
@@ -271,7 +292,7 @@ public static class VoldeligExtention
                     try
                     {
                         // Deserialize and return the entity
-                        T entityResult = cardDataToken.ToObject<T>();
+                        entityResult = cardDataToken.ToObject<T>();
                         // V1 doesn't seem to have table data in this structure based on original code
                         return Either<T, VoldeligHttpResponseMessage>.FromLeft(entityResult);
                     }
